@@ -53,7 +53,7 @@ if mode == "Signs-Based":
 
         rec_row = df_recs[df_recs['Disorder'].str.lower() == top_disorder.lower()]
         if not rec_row.empty:
-            st.subheader("✅ Recommendations")
+            st.subheader("Recommendations")
             self_recs = rec_row['Reccomendations; Self'].dropna().values
             prof_recs = rec_row['Reccomendation 2; Proffesional'].dropna().values
             other_recs = rec_row['Other Reccomendation'].dropna().values
@@ -110,7 +110,7 @@ elif mode == "Lifestyle-Based":
         }])
 
         prediction = risk_model.predict(sample)[0]
-        label = "✅ Low Risk (No Disorder)" if prediction == 0 else "⚠️ High Risk (Disorder Likely)"
+        label = "Low Risk (No Disorder)" if prediction == 0 else "⚠️ High Risk (Disorder Likely)"
         st.markdown(f"###  Prediction: **{label}**")
 
         if prediction == 1:
