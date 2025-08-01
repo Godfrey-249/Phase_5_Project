@@ -1,4 +1,4 @@
-# 🧠 Mental Health Prediction Assistant
+# Mental Health Prediction Assistant
 
 A Streamlit web app that predicts potential mental health disorders and severity using:
 
@@ -9,7 +9,7 @@ This assistant helps screen mental health concerns and provide personalized self
 
 ---
 
-## 🚀 Features
+##  Features
 
 ### 🔹 Signs-Based Prediction (NLP)
 - Enter free-text symptoms (e.g., "I feel anxious and can't sleep").
@@ -22,7 +22,7 @@ This assistant helps screen mental health concerns and provide personalized self
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 phase_5_project/
@@ -36,7 +36,7 @@ phase_5_project/
 
 ---
 
-## ▶️ How to Run the App
+##  How to Run the App
 
 ### 1. Clone the Repo
 
@@ -59,7 +59,7 @@ streamlit run app.py
 
 ---
 
-## 📸 Screenshot Placeholder
+##  Screenshot Placeholder
 
 You can include a screenshot using:
 
@@ -69,7 +69,7 @@ st.image("screenshot.png")
 
 ---
 
-## 🧾 Full App Code
+##  Full App Code
 
 ```python
 import streamlit as st
@@ -95,7 +95,7 @@ risk_model = structured_bundle["risk_model"]
 severity_model = structured_bundle["severity_model"]
 encoders = structured_bundle["encoders"]
 
-st.title("🧠 Mental Health Prediction Assistant")
+st.title(" Mental Health Prediction Assistant")
 st.markdown("Choose a mode below to begin:")
 
 mode = st.sidebar.radio("Choose Prediction Mode", ["Signs-Based", "Lifestyle-Based"])
@@ -176,7 +176,7 @@ elif mode == "Lifestyle-Based":
         }])
 
         prediction = risk_model.predict(sample)[0]
-        label = "Low Risk (No Disorder)" if prediction == 0 else "⚠️ High Risk (Disorder Likely)"
+        label = "Low Risk (No Disorder)" if prediction == 0 else " High Risk (Disorder Likely)"
         st.markdown(f"### Prediction: **{label}**")
 
         if prediction == 1:
