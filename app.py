@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import sentence_transformers
 import sentence_transformers.util as util
+import difflib
+import requests
 
 # -------------------- Load Models --------------------
 
@@ -38,12 +40,21 @@ st.markdown("Predict mental health concerns from **symptoms** or **lifestyle pat
 # Sidebar choice
 mode = st.sidebar.radio(" Choose Prediction Mode", ["Signs-Based", "Lifestyle-Based"])
 
-# -------------------- NLP MODE --------------------
-if mode == "Signs-Based":
+tab1, tab2 = st.tabs(["Signs-Based", "Lifestyle-Based"])
+
+with tab1:
     st.header(" Signs-based Disorder Prediction")
     user_input = st.text_area("Describe your signs or feelings here (e.g., 'I feel hopeless and anxious'):")
 
+    # Example for signs-based prediction
     if st.button(" Predict Disorder"):
+        response = requests.post(
+            "http://localhost:8000/predict_signs",
+            json={"text": user_input}
+        )
+        result = response.json()
+        st.write(result["predictions"])
+
         input_embed = nlp_model.encode(user_input)
         similarities = {}
 
@@ -60,34 +71,41 @@ if mode == "Signs-Based":
         top_disorder = sorted_disorders[0][0]
         st.markdown(f"###  Top Concern: **{top_disorder}**")
 
-        rec_row = df_recs[df_recs['Disorder'].str.lower() == top_disorder.lower()]
+        # Fuzzy match to handle typos
+        disorders_list = [d.strip().lower() for d in df_recs['Disorder'].unique()]
+        closest = difflib.get_close_matches(top_disorder.strip().lower(), disorders_list, n=1, cutoff=0.7)
+
+        if closest:
+            matched_disorder = closest[0]
+            rec_row = df_recs[df_recs['Disorder'].str.strip().str.lower() == matched_disorder]
+        else:
+            rec_row = pd.DataFrame()  # Empty DataFrame
+
         if not rec_row.empty:
             st.subheader(" Recommendations")
+            with st.expander("Show Recommendations"):
+                self_recs = rec_row['Reccomendations; Self'].dropna().values
+                prof_recs = rec_row['Reccomendation 2; Proffesional'].dropna().values
+                other_recs = rec_row['Other Reccomendation'].dropna().values
 
-            self_recs = rec_row['Reccomendations; Self'].dropna().values
-            prof_recs = rec_row['Reccomendation 2; Proffesional'].dropna().values
-            other_recs = rec_row['Other Reccomendation'].dropna().values
+                st.markdown("**Self-care:**")
+                for i, val in enumerate(self_recs[:3], 1):
+                    st.markdown(f"- Option {i}: {val}")
 
-            st.markdown("**Self-care:**")
-            for i, val in enumerate(self_recs[:3], 1):
-                st.markdown(f"- Option {i}: {val}")
+                st.markdown("**Professional Help:**")
+                for i, val in enumerate(prof_recs[:2], 1):
+                    st.markdown(f"- Option {i}: {val}")
 
-            st.markdown("**Professional Help:**")
-            for i, val in enumerate(prof_recs[:2], 1):
-                st.markdown(f"- Option {i}: {val}")
-
-            st.markdown("**Other Recommendations:**")
-            for i, val in enumerate(other_recs[:2], 1):
-                st.markdown(f"- Option {i}: {val}")
+                st.markdown("**Other Recommendations:**")
+                for i, val in enumerate(other_recs[:2], 1):
+                    st.markdown(f"- Option {i}: {val}")
         else:
             st.error("No recommendations found.")
 
-# -------------------- STRUCTURED MODE --------------------
-elif mode == "Lifestyle-Based":
+
+with tab2:
     st.header(" Lifestyle-based Risk Prediction")
     
-    label= None
-    severity = None
     # Input fields
     age = st.slider("Age", 10, 100, 25)
     gender = st.selectbox("Gender", encoders["Gender"].classes_)
@@ -126,9 +144,9 @@ elif mode == "Lifestyle-Based":
         label = " Low Risk (No Disorder)" if prediction == 0 else " High Risk (Disorder Likely)"
         
         st.markdown(f"### Prediction: **{label}**")
-        if prediction == 1:
-            severity = severity_model.predict(sample)[0]
-            severity = "Mild" if severity == 0 else "Moderate" if severity == 1 else "Severe"
+        if str(prediction) == "1" or str(prediction).lower() == "yes":
+            severity_raw = severity_model.predict(sample)[0]
+            severity = "Mild" if severity_raw == 0 else "Moderate" if severity_raw == 1 else "Severe"
 
             st.markdown(f"### Estimated Severity: **{severity}**")
 
@@ -169,19 +187,18 @@ elif mode == "Lifestyle-Based":
                 st.success(" No disorder detected at this time. Keep maintaining healthy habits.")
     
     
-    # Save to session state history
-    st.session_state.history.append({
-        "Age": age,
-        "Gender": gender,
-        "Stress": stress,
-        "Sleep Hours": sleep,
-        "Risk": label
-})
+        # Save to session state history
+        st.session_state.history.append({
+            "Age": age,
+            "Gender": gender,
+            "Stress": stress,
+            "Sleep Hours": sleep,
+            "Risk": label
+        })
 
-
-
-    # Show history
-    if st.session_state.history:
+# Show history
+if st.session_state.history:
+    with st.expander("Show Prediction History"):
         st.subheader(" Your Prediction History")
         history_df = pd.DataFrame(st.session_state.history)
         st.dataframe(history_df)
@@ -195,4 +212,4 @@ elif mode == "Lifestyle-Based":
             data=history_df.to_csv(index=False),
             file_name="mental_health_prediction_history.csv",
             mime="text/csv"
-        ) 
+        )
