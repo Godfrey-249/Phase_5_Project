@@ -2,7 +2,8 @@ import streamlit as st
 import pickle
 import numpy as np
 import pandas as pd
-from sentence_transformers import SentenceTransformer, util
+import sentence_transformers
+import sentence_transformers.util as util
 
 # -------------------- Load Models --------------------
 
@@ -84,7 +85,9 @@ if mode == "Signs-Based":
 # -------------------- STRUCTURED MODE --------------------
 elif mode == "Lifestyle-Based":
     st.header(" Lifestyle-based Risk Prediction")
-
+    
+    label= None
+    severity = None
     # Input fields
     age = st.slider("Age", 10, 100, 25)
     gender = st.selectbox("Gender", encoders["Gender"].classes_)
@@ -101,40 +104,81 @@ elif mode == "Lifestyle-Based":
     medication = st.selectbox("Medication Usage", encoders["Medication_Usage"].classes_)
 
     if st.button(" Assess Risk"):
+        
         # Encode inputs
         sample = pd.DataFrame([{
             'Age': age,
             'Gender': encoders['Gender'].transform([gender])[0],
             'Occupation': encoders['Occupation'].transform([occupation])[0],
-            'Consultation_History': encoders['Consultation_History'].transform([consultation])[0],
-            'Stress_Level': encoders['Stress_Level'].transform([stress])[0],
-            'Sleep_Hours': sleep,
-            'Work_Hours': work,
-            'Physical_Activity_Hours': physical,
-            'Social_Media_Usage': social,
             'Diet_Quality': encoders['Diet_Quality'].transform([diet])[0],
             'Smoking_Habit': encoders['Smoking_Habit'].transform([smoking])[0],
             'Alcohol_Consumption': encoders['Alcohol_Consumption'].transform([alcohol])[0],
-            'Medication_Usage': encoders['Medication_Usage'].transform([medication])[0]
+            'Sleep_Hours': sleep,
+            'Physical_Activity_Hours': physical,
+            'Stress_Level': encoders['Stress_Level'].transform([stress])[0],
+            'Social_Media_Usage': social,
+            'Consultation_History': encoders['Consultation_History'].transform([consultation])[0],
+            'Medication_Usage': encoders['Medication_Usage'].transform([medication])[0],
+            'Work_Hours': work
         }])
 
         prediction = risk_model.predict(sample)[0]
         label = " Low Risk (No Disorder)" if prediction == 0 else " High Risk (Disorder Likely)"
+        
         st.markdown(f"### Prediction: **{label}**")
-
-        severity = severity_model.predict(sample)[0] if prediction == 1 else "N/A"
         if prediction == 1:
+            severity = severity_model.predict(sample)[0]
+            severity = "Mild" if severity == 0 else "Moderate" if severity == 1 else "Severe"
+
             st.markdown(f"### Estimated Severity: **{severity}**")
 
-        # Save to session state history
-        st.session_state.history.append({
-            "Age": age,
-            "Gender": gender,
-            "Stress": stress,
-            "Sleep": sleep,
-            "Risk": label,
-            "Severity": severity
-        })
+            # Adding recommendations based on severity.
+            st.subheader(" Lifestyle Recommendations")
+
+            if severity == "Mild":
+                st.markdown("**Self-Care Tips:**")
+                st.markdown("- Practice daily mindfulness or journaling.")
+                st.markdown("- Aim for 7–9 hours of sleep.")
+                st.markdown("- Engage in regular physical activity (at least 3 hrs/week).")
+
+                st.markdown("**Consider:**")
+                st.markdown("- Reducing caffeine and alcohol.")
+                st.markdown("- Talking to a trusted friend.")
+
+            elif severity == "Moderate":
+                st.markdown("**Lifestyle Adjustments:**")
+                st.markdown("- Follow a structured routine for work and rest.")
+                st.markdown("- Increase physical activity and limit screen time.")
+                st.markdown("- Join peer support groups or therapy sessions.")
+
+                st.markdown("**Consider Professional Help:**")
+                st.markdown("- Schedule an appointment with a therapist or counselor.")
+                st.markdown("- Seek advice from a wellness coach.")
+
+            elif severity == "Severe":
+                st.markdown(" **Immediate Actions Recommended:**")
+                st.markdown("- Contact a licensed mental health professional.")
+                st.markdown("- Inform someone close to you for support.")
+                st.markdown("- Prioritize rest, nutrition, and avoid isolation.")
+
+                st.markdown("**Professional Help:**")
+                st.markdown("- Consider clinical therapy and medication.")
+                st.markdown("- Contact emergency support lines if overwhelmed.")
+            else:
+                severity = "N/A"
+                st.success(" No disorder detected at this time. Keep maintaining healthy habits.")
+    
+    
+    # Save to session state history
+    st.session_state.history.append({
+        "Age": age,
+        "Gender": gender,
+        "Stress": stress,
+        "Sleep Hours": sleep,
+        "Risk": label
+})
+
+
 
     # Show history
     if st.session_state.history:
@@ -151,4 +195,4 @@ elif mode == "Lifestyle-Based":
             data=history_df.to_csv(index=False),
             file_name="mental_health_prediction_history.csv",
             mime="text/csv"
-        )
+        ) 
