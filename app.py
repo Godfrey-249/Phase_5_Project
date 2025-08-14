@@ -9,14 +9,15 @@ import requests
 
 # -------------------- Load Models --------------------
 
-# Load NLP model bundle
-with open("model_nlp.pkl", "rb") as f:
-    nlp_bundle = pickle.load(f)
+with open("model_structured.pkl", "rb") as f:
+    structured_bundle = pickle.load(f)
 
-nlp_model = nlp_bundle["model"]
-disorder_embeddings = nlp_bundle["embeddings"]
-signs_dict = nlp_bundle["signs_dict"]
-df_recs = nlp_bundle["recommendations"]
+lifestyle_model = structured_bundle["risk_model"]      # Risk prediction model
+severity_model = structured_bundle["severity_model"]   # Severity prediction model
+encoders = structured_bundle["encoders"]               # Label encoders
+features = structured_bundle["features"]               # Feature list
+
+
 
 # Load Structured model bundle
 with open("model_structured.pkl", "rb") as f:
@@ -103,113 +104,95 @@ with tab1:
             st.error("No recommendations found.")
 
 
+
+# =========================
+# SAFE PREDICTION FUNCTION
+# =========================
+
+def safe_predict(model, sample_df, feature_order):
+    try:
+        sample_df = sample_df[feature_order]
+    except KeyError as e:
+        st.error(f"Missing/extra features for prediction: {e}")
+        return None
+    return model.predict(sample_df)[0], getattr(model, "predict_proba", lambda x: None)(sample_df)
+
+# ---------- TAB 2 ----------
+# =========================
+# TAB 2: Lifestyle Risk Prediction
+# =========================
 with tab2:
-    st.header(" Lifestyle-based Risk Prediction")
-    
-    # Input fields
-    age = st.slider("Age", 10, 100, 25)
+    st.header("Lifestyle-Based Mental Health Risk Assessment")
+
+    # Load the full structured model bundle
+    with open("model_structured.pkl", "rb") as f:
+        structured_bundle = pickle.load(f)
+
+    risk_model = structured_bundle["risk_model"]
+    severity_model = structured_bundle["severity_model"]
+    encoders = structured_bundle["encoders"]
+    features = structured_bundle["features"]
+
+    # Inputs
+    age = st.number_input("Age", min_value=1, max_value=120, value=25)
+
     gender = st.selectbox("Gender", encoders["Gender"].classes_)
     occupation = st.selectbox("Occupation", encoders["Occupation"].classes_)
     consultation = st.selectbox("Consultation History", encoders["Consultation_History"].classes_)
-    stress = st.selectbox("Stress Level", encoders["Stress_Level"].classes_)
-    sleep = st.slider("Sleep Hours", 4, 10, 6)
-    work = st.slider("Work Hours per Week", 30, 80, 40)
-    physical = st.slider("Physical Activity (hrs/week)", 0, 10, 3)
-    social = st.slider("Social Media Usage (hrs/day)", 0.5, 6.0, 3.0, step=0.5)
-    diet = st.selectbox("Diet Quality", encoders["Diet_Quality"].classes_)
-    smoking = st.selectbox("Smoking Habit", encoders["Smoking_Habit"].classes_)
-    alcohol = st.selectbox("Alcohol Consumption", encoders["Alcohol_Consumption"].classes_)
-    medication = st.selectbox("Medication Usage", encoders["Medication_Usage"].classes_)
 
-    if st.button(" Assess Risk"):
-        
-        # Encode inputs
-        sample = pd.DataFrame([{
+    stress = st.selectbox("Stress Level", encoders["Stress_Level"].classes_)
+    stress_map = {"Low": 0, "Medium": 1, "High": 2 } 
+
+    sleep_hours = st.number_input("Average Sleep Hours", min_value=0, max_value=10, value=7, step=1)
+    physical_activity = st.number_input("Physical Activity Hours", min_value=0, max_value=10, value=1, step=1)
+    social_media_hours = st.number_input("Social Media Usage (Hours)", min_value=0, max_value=6, value=2, step=1)
+
+    diet_quality = st.selectbox("Diet Quality", ["Healthy", "Unhealthy", "Average"])
+    diet_map = {"Healthy": 2, "Unhealthy": 0, "Average": 1}
+
+    smoke_map = {"Non-Smoker": 0, "Occasional Smoker": 1, "Regular Smoker": 2, "Heavy Smoker": 3}
+    smoking = st.selectbox("Smoking Habit", ["Non-Smoker", "Occasional Smoker", "Regular Smoker", "Heavy Smoker"])
+
+    alcohol_map = {"Non-Drinker": 0, "Occasional Drinker": 1, "Regular Drinker": 2, "Heavy Drinker": 3}
+    alcohol= st.selectbox("Alcohol Consumption", ["Non-Drinker", "Occasional Drinker", "Regular Drinker", "Heavy Drinker"])
+
+    medication = st.selectbox("Medication Usage", encoders["Medication_Usage"].classes_)
+    work_hours = st.number_input("Average Work Hours per week", min_value=0.0, max_value=80.0, value=8.0, step=5.0)
+
+    if st.button("Predict Risk"):
+        # Encode categorical features using the trained encoders
+        sample_dict = {
             'Age': age,
             'Gender': encoders['Gender'].transform([gender])[0],
             'Occupation': encoders['Occupation'].transform([occupation])[0],
-            'Diet_Quality': encoders['Diet_Quality'].transform([diet])[0],
-            'Smoking_Habit': encoders['Smoking_Habit'].transform([smoking])[0],
-            'Alcohol_Consumption': encoders['Alcohol_Consumption'].transform([alcohol])[0],
-            'Sleep_Hours': sleep,
-            'Physical_Activity_Hours': physical,
-            'Stress_Level': encoders['Stress_Level'].transform([stress])[0],
-            'Social_Media_Usage': social,
             'Consultation_History': encoders['Consultation_History'].transform([consultation])[0],
-            'Medication_Usage': encoders['Medication_Usage'].transform([medication])[0],
-            'Work_Hours': work
-        }])
+            'Stress_Level': stress_map[stress],
+            'Sleep_Hours': sleep_hours,
+            'Work_Hours': work_hours,
+            'Physical_Activity_Hours': physical_activity,
+            'Social_Media_Usage': social_media_hours,
+            'Diet_Quality': diet_map[diet_quality],
+            'Smoking_Habit': smoke_map[smoking],
+            'Alcohol_Consumption': alcohol_map[alcohol],
+            'Medication_Usage': encoders['Medication_Usage'].transform([medication])[0]
+        }
 
-        prediction = risk_model.predict(sample)[0]
-        label = " Low Risk (No Disorder)" if prediction == 0 else " High Risk (Disorder Likely)"
-        
-        st.markdown(f"### Prediction: **{label}**")
-        if str(prediction) == "1" or str(prediction).lower() == "yes":
-            severity_raw = severity_model.predict(sample)[0]
-            severity = "Mild" if severity_raw == 0 else "Moderate" if severity_raw == 1 else "Severe"
+        # Ensure feature order matches training
+        sample_df = pd.DataFrame([[sample_dict[col] for col in features]], columns=features)
 
-            st.markdown(f"### Estimated Severity: **{severity}**")
+        # Predict
+        risk_out = risk_model.predict(sample_df)[0]
+        sev_out = severity_model.predict(sample_df)[0]
 
-            # Adding recommendations based on severity.
-            st.subheader(" Lifestyle Recommendations")
-
-            if severity == "Mild":
-                st.markdown("**Self-Care Tips:**")
-                st.markdown("- Practice daily mindfulness or journaling.")
-                st.markdown("- Aim for 7–9 hours of sleep.")
-                st.markdown("- Engage in regular physical activity (at least 3 hrs/week).")
-
-                st.markdown("**Consider:**")
-                st.markdown("- Reducing caffeine and alcohol.")
-                st.markdown("- Talking to a trusted friend.")
-
-            elif severity == "Moderate":
-                st.markdown("**Lifestyle Adjustments:**")
-                st.markdown("- Follow a structured routine for work and rest.")
-                st.markdown("- Increase physical activity and limit screen time.")
-                st.markdown("- Join peer support groups or therapy sessions.")
-
-                st.markdown("**Consider Professional Help:**")
-                st.markdown("- Schedule an appointment with a therapist or counselor.")
-                st.markdown("- Seek advice from a wellness coach.")
-
-            elif severity == "Severe":
-                st.markdown(" **Immediate Actions Recommended:**")
-                st.markdown("- Contact a licensed mental health professional.")
-                st.markdown("- Inform someone close to you for support.")
-                st.markdown("- Prioritize rest, nutrition, and avoid isolation.")
-
-                st.markdown("**Professional Help:**")
-                st.markdown("- Consider clinical therapy and medication.")
-                st.markdown("- Contact emergency support lines if overwhelmed.")
+        # Display results
+        if risk_out == 1:
+            st.markdown("**Mental Health Risk:** High Risk (Disorder Likely)")
+            if sev_out == 0:
+                st.markdown("Severity: Mild symptoms detected. Consider monitoring and self-care.")
+            elif sev_out == 1:
+                st.markdown("Severity: Moderate symptoms. Professional consultation recommended.")
             else:
-                severity = "N/A"
-                st.success(" No disorder detected at this time. Keep maintaining healthy habits.")
-    
-    
-        # Save to session state history
-        st.session_state.history.append({
-            "Age": age,
-            "Gender": gender,
-            "Stress": stress,
-            "Sleep Hours": sleep,
-            "Risk": label
-        })
-
-# Show history
-if st.session_state.history:
-    with st.expander("Show Prediction History"):
-        st.subheader(" Your Prediction History")
-        history_df = pd.DataFrame(st.session_state.history)
-        st.dataframe(history_df)
-
-        st.markdown("### Risk Outcome Distribution")
-        risk_counts = history_df["Risk"].value_counts()
-        st.bar_chart(risk_counts)
-
-        st.download_button(
-            label=" Download History as CSV",
-            data=history_df.to_csv(index=False),
-            file_name="mental_health_prediction_history.csv",
-            mime="text/csv"
-        )
+                st.markdown("Severity: Severe symptoms. Seek immediate help.")
+        else:
+            st.markdown("**Mental Health Risk:** Low Risk (No Disorder)")
+            st.markdown("No disorder detected at this time. Keep maintaining healthy habits.")
